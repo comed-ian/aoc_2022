@@ -1,0 +1,16 @@
+    [D]    
+Slice    
+hit    
+Slice [D]
+hit [D]
+[N] [C]    
+Slice [N]
+hit [N]
+Slice [C]
+hit [C]
+[Z] [M] [P]
+Slice [Z]
+hit [Z]
+Slice [M]
+hit [M]
+ShipState { stacks: [], instructions: [Instruction { from: 2, to: 1, qty: 1 }, Instruction { from: 1, to: 3, qty: 3 }, Instruction { from: 2, to: 1, qty: 2 }, Instruction { from: 1, to: 2, qty: 1 }], num_stacks: 2 }
