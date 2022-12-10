@@ -1,23 +1,6 @@
 use std::fs;
 
 #[derive(Debug)]
-pub enum FileType {
-    Directory {
-        files: Vec<usize>,
-    },
-    File,
-}
-
-impl FileType {
-    pub fn add_child(&mut self, n: usize) {
-        match self {
-            FileType::Directory { files } => files.push(n),
-            _ => ()
-        }
-    }
-}
-
-#[derive(Debug)]
 pub enum Command {
     Cd { dest: String  }, 
     Ls { res: Vec<String> },
@@ -45,151 +28,169 @@ impl From<String> for Command {
 }
 
 #[derive(Debug)]
-pub struct FileSystem {
-    files: Vec<ElfFile>,
-    current_dir: Option<usize>,
+pub enum ElfFile {
+    Directory {
+        name: String,
+        size: usize,
+        children: Vec<ElfFile>,
+    },
+    File {
+        name: String,
+        size: usize,
+    }
 }
 
-impl FileSystem {
-    fn add(&mut self, name: String, size: usize) -> usize {
-        let n: usize = self.files.len();
-        let parent: Option<usize> = self.current_dir;
-        let filetype = match size {
-            0 => FileType::Directory { files: Vec::new() },
-            _ => FileType::File,
-        };
-        // add file to main FileSystem list
-        self.files.push(
-            ElfFile {
-                idx: n,
-                name,
-                filetype,
-                size,
-                parent
-            }
-        );
-        // add file index to current directory's children 
-        match self.current_dir {
-            Some(idx) => {
-                self.files[idx].filetype.add_child(n);
-            }
-            _ => ()
-        }
-        // propagate size updates 
-        // let mut cd = self.current_dir;
-        // loop {
-        //     match cd { 
-        //         Some(idx) => {
-        //             self.files[idx].size += size;
-        //             cd = self.files[idx].parent;
-        //         },
-        //         None => break,
-        //     }
-        // }
-        n
-    }
-
-    fn handle_cmd(&mut self, cmd: Command) {
-        match cmd {
-            Command::Cd { dest } => {
-                match self.files.iter().filter(|x| x.name == dest).next() {
-                    None => {
-                        // if changing to directory that doesn't exist yet
-                        // (e.g., '/'), add it 
-                        if dest != ".." { 
-                            let n = self.add(dest, 0); 
-                            self.current_dir = Some(n);
-                        }
-                        else {
-                        // move up a directory
-                            match self.current_dir {
-                                Some(n) => { 
-                                    match self.files[n].parent { 
-                                        Some(p) => self.current_dir = Some(p),
-                                        None => (), // do nothing
-                                    }
-                                },
-                                None => panic!("moving up from non-existent dir"), 
-                            }
-                        } 
-                    },
-                    // directory match, change current dir
-                    Some(file) => self.current_dir = Some(file.idx),
-                }
-                println!("changing current dir to: {}", self.files[self.current_dir.unwrap()].name); 
+impl From<String> for ElfFile {
+    fn from(s: String) -> Self {
+        match s.split(" ").next().unwrap() {
+            "dir" => ElfFile::Directory {
+                size: 0,
+                name: s.split(" ").last().unwrap().to_owned(),
+                children: Vec::new(),
             },
-            Command::Ls { res } => {
-                match self.current_dir  {
-                    Some(idx) => {
-                        for i in res.iter() {
-                            _ = match i.split(" ").next().unwrap() {
-                                "dir" => self.add(i.split(" ").last().unwrap().to_owned(), 0),
-                                size => self.add(i.split(" ").last().unwrap().to_owned(), size.parse::<usize>().unwrap()),
-                            };
-                        }
-                    },
-                    None => panic!("ls printed for no current dir"),
-                }       
+            size => ElfFile::File {
+                name: s.split(" ").last().unwrap().to_owned(),
+                size: size.parse::<usize>().unwrap(),
             }
         }
     }
-
-    pub fn filter_less_than(&self, size: usize) -> usize {
-        let mut total: usize = 0;
-        for f in self.files 
-            .iter()
-            .filter(|y| y.is_dir())
-            .filter(|x| x.size < size) {
-                println!("Directory {} has size {}", f.name, f.size);
-                total += f.size
-        }
-        total
-    }
-
-    pub fn update_sizes(&mut self) {
-        // propagate file sizes to parents
-        for mut f in self.files
-            .iter()
-            .filter(|y| !y.is_dir()) {
-                match f.parent {
-                    Some(idx) => self.files[idx].size += f.size,
-                    None => panic!("abandoned child!"),
-                }
-        }
-        // propagate directory sizes upward 
-        // for f in self.files
-        //    .iter   
-    }
-}
-
-#[derive(Debug)]
-pub struct ElfFile {
-    idx: usize,
-    name: String,
-    size: usize,
-    filetype: FileType,
-    parent: Option<usize>,
 }
 
 impl ElfFile {
-    pub fn is_dir(&self) -> bool {
-        match self.filetype {
-            FileType::Directory { files: _ } => true,
-            _ => false,
+    pub fn name(&self) -> &String {
+        match self {
+            ElfFile::File { name, .. } => &name,
+            ElfFile::Directory { name, .. } => &name,
+        } 
+    }
+    pub fn add(&mut self, f: ElfFile) {
+        match self {
+            ElfFile::Directory { children, .. } => children.push(f),
+            _ => panic!("Error, cannot add child to file"),
+        } 
+    }
+    pub fn get_node(&mut self, path: &[impl AsRef<str>]) -> Option<&mut Self> {
+        if path.len() == 0 { return Some(self) }
+
+        let children = match self {
+            ElfFile::Directory { children, .. } => children,
+            ElfFile::File { .. } => panic!("Error, cannot cd within file"),
+        };
+
+        let to = &path[0].as_ref();
+        for c in children {
+            if c.name() == to { return c.get_node(&path[1..]) } 
         }
+
+        None
+       
+        // ElfFile::Directory { children, name, .. } => {
+        //     if path.len() == 0 { return Some(self) }
+        //     let to = &path[0].as_ref();
+        //     for c in children {
+        //         if c.name() == to { return c.get_node(&path[1..]) } 
+        //     }
+        //     panic!("No child {} found for node {}", to, name);
+        // },
+    }
+    pub fn dir_size(&self) -> usize {
+        match self {
+            ElfFile::File { .. } => 0,
+            ElfFile::Directory { size, .. } =>  *size
+        }
+    }
+    pub fn get_size(&mut self) -> usize {
+        match self {
+            ElfFile::File { size, .. } => *size,
+            ElfFile::Directory { children, size, .. } => { 
+                *size = children.into_iter().map(Self::get_size).sum();
+                *size
+            }
+        }
+    }
+    pub fn find_smallest_dir_larger_than(&self, limit: usize, current: usize) 
+        -> usize {
+        match self {
+            ElfFile::File { .. } => 0xffffffff,
+            ElfFile::Directory { size, children, .. } => {
+                if *size < limit { return current }
+                let smallest = children
+                    .iter()
+                    .map(|x| x.find_smallest_dir_larger_than(limit, current))
+                    .filter(|&x| x!=0 && x >= limit)
+                    .min().unwrap();
+                if smallest == current { *size }
+                else { smallest }
+            }
+        } 
+    }
+    pub fn sum_dir_smaller_than(&self, limit: usize) -> usize {
+        match self {
+            ElfFile::File { .. } => 0,
+            ElfFile::Directory { size, children, .. } => {
+                let mut total = 0usize; 
+                if *size <= limit { total += *size }
+                total += children
+                    .iter()
+                    .map(|x| x.sum_dir_smaller_than(limit))
+                    .sum::<usize>();
+                total
+            }
+        }
+    } 
+}
+
+#[derive(Debug)]
+pub struct FileSystem {
+    root: ElfFile,
+    curr_path: Vec<String>,
+}
+
+impl FileSystem {
+    pub fn handle(&mut self, c: Command) {
+        match c {
+            Command::Cd { dest } => {
+                match &dest[..] {
+                    "/" => self.curr_path.clear(),
+                    ".." => drop(self.curr_path.pop()),
+                    dir => self.curr_path.push(dir.to_owned()), 
+                }
+            },
+            Command::Ls { res } => {
+                let curr_node = self.root.get_node(&self.curr_path).unwrap();
+                for r in res {
+                    curr_node.add(ElfFile::from(r));
+                }
+            }
+        }
+    }
+    pub fn get_size(&mut self) -> usize {
+        self.root.get_size()
+    }
+    pub fn sum_less_than(&self, size: usize) -> usize {
+        self.root.sum_dir_smaller_than(size)
+    }
+    pub fn find_dir_to_delete(&self, size: usize) -> usize {
+        self.root.find_smallest_dir_larger_than(size, 0xffffffff)
     }
 }
 
-pub fn enumerate(filename: &str) -> FileSystem {
-    let mut filesystem = FileSystem {
-        files: Vec::new(),
-        current_dir: None,
+pub fn injest_data(filename: &str) -> FileSystem {
+    let root = ElfFile::Directory {
+        name: "/".to_owned(),
+        size: 0,
+        children: Vec::new(),
+    };
+
+    let mut fs = FileSystem {
+        root,
+        curr_path: Vec::new(),
     };
 
     let data = fs::read_to_string(filename).expect("failed to read from file");
-    for mut i in data.trim().split("$ ") {
+    for i in data.trim().split("$ ") {
         if i == "" { continue } ;
-        filesystem.handle_cmd(Command::from(i.to_owned()));
-    }    
-    filesystem
+        fs.handle(Command::from(i.to_owned()));
+    }  
+    fs  
 }
