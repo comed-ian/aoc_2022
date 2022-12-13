@@ -6,10 +6,73 @@ pub struct Control {
     bottom: u8,
     left: u8,
     right: u8,
-}
-    
+}   
+        
 type Grid = Vec<Vec<u8>>;
+type GridU32 = Vec<Vec<u32>>;
 type ControlGrid = Vec<Vec<Control>>;
+
+
+pub fn get_scenic_score(g: &Grid) -> GridU32 {
+    let size = g.len();
+    let mut c: GridU32 = vec![vec![0; size]; size];
+    for i in 0..size-1 {
+        for j in 0..size-1 {
+            if i == 0 || i == size - 1 || j == 0 || j == size - 1 {
+                c[i][j] = 0;
+                continue;
+            }
+            let val = g[i][j];
+            let mut score = 1u32;
+            let mut count = 0u32;
+            let mut idx: usize = j - 1;
+            // check left
+            loop {
+                count += 1;
+                if g[i][idx] >= val { break; }
+                if idx == 0 { break; }
+                idx -= 1;
+            }
+            score *= count;
+            // check up 
+            count = 0;
+            idx = i - 1;
+            loop {
+                count += 1;
+                if idx == 0 { break; } 
+                if g[idx][j] >= val { break; }
+                idx -= 1
+            }
+            score *= count;
+            // check right 
+            count = 0;
+            idx = j + 1; 
+            loop {
+                count += 1;
+                if idx == size - 1 { break; }
+                if g[i][idx] >= val { break; }
+                idx += 1;
+            }
+            score *= count;
+            //check down 
+            count = 0; 
+            idx = i + 1;
+            loop {
+                count += 1;
+                if idx == size - 1 { break; }
+                if g[idx][j] >= val { break; }
+                idx += 1;
+            }
+            score *= count; 
+            c[i][j] = score;
+        }
+    }
+    c
+}
+
+pub fn get_max_scenic_score(c: &GridU32) -> u32 {
+    *c.iter().flatten().max_by(|a, b| a.cmp(b)).unwrap()
+}
 
 pub fn check_down(v: &mut Grid, g: &Grid, c: &mut ControlGrid, i_start: usize, i_end: usize, col: usize) {
     for idx in i_start..i_end+1 {
@@ -61,24 +124,8 @@ pub fn check_right(v: &mut Grid, g: &Grid, c: &mut ControlGrid, i_start: usize, 
             c[row][idx].left = c[row][idx-1].left;
         }
     }     
-
-//     // working from top left to bottom right
-//     // can inductively assume those values are valid for strict comparison
-//     if v[i-1][j] == 1 && (g[i-1][j] < g[i][j]) { v[i][j] = 1 } 
-//     if v[i][j-1] == 1 && (g[i][j-1] < g[i][j]) { v[i][j] = 1 }
-// 
-//     // if reached the second last row or column, can compare directly to border
-//     if i == limit - 2 {
-//         println!("Comparing {} with {}", g[i+1][j], g[i][j]);
-//         if v[i+1][j] == 1 && (g[i+1][j] < g[i][j]) { v[i][j] = 1 } 
-//     }
-//     if j == limit - 2 {
-//         if v[i][j+1] == 1 && (g[i][j+1] < g[i][j]) { v[i][j] = 1 }
-//         println!("Comparing {} with {}", g[i][j+1], g[i][j]);
-//     }
-// 
-//     // if previous conditions weren't fulfilled 
 }
+
 pub fn is_visible(g: &Grid) -> Grid {
     let size = g.len();
     let mut visible: Grid = vec![vec![0xffu8; size]; size];
@@ -109,10 +156,8 @@ pub fn is_visible(g: &Grid) -> Grid {
     let mut i_end: usize = size - 2;
     while i_start <= i_end {
         for row in i_start..i_end + 1 { 
-            println!("Checking row {} from index {} to {}", row, i_start, i_end);
             check_right(&mut visible, &g, &mut control, i_start, i_end, row);
             check_left(&mut visible, &g, &mut control, i_start, i_end, row);
-            println!("Checking row {} from index {} to {}", row, i_start, i_end);
             check_down(&mut visible, &g, &mut control, i_start, i_end, row);
             check_up(&mut visible, &g, &mut control, i_start, i_end, row);
             // print_control_grid(&control);
@@ -144,6 +189,15 @@ pub fn print_grid(g: &Grid) {
         for j in i {
             if *j == 255 { print!("X "); }
             else { print!("{} ", j); }
+        }
+        println!();
+    }
+}
+
+pub fn print_grid_u32(g: &GridU32) {
+    for i in g {
+        for j in i {
+            print!("{} ", j);
         }
         println!();
     }
